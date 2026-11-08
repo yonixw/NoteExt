@@ -81,6 +81,8 @@ Every change saves automatically to `chrome.storage.local`.
 | `content.js` | Picker, selector generation, condition evaluation, marker rendering (Shadow DOM) |
 | `minimap.js` | Scroll minimap strips; fed by `content.js` after every layout |
 | `sidepanel.html/.css/.js` | Sidebar UI |
+| `icons/` | App icon (16/32/48/128 px) |
+| `tools/make-icons.js` | Optional: regenerates the icons (`node tools/make-icons.js`, no dependencies) |
 
 ## Known limits (for now)
 

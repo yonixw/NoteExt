@@ -1,0 +1,23 @@
+# Packed extension builds and their signing key (never publish the .pem)
+*.crx
+*.pem
+*.zip
+
+# Exported note data (may contain personal notes)
+noteext-*.json
+
+# Node / tooling
+node_modules/
+npm-debug.log*
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local Claude Code settings
+.claude/
