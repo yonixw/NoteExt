@@ -10,9 +10,14 @@ Source: https://github.com/yonixw/NoteExt
 
 ## Download
 
-Get the zip from the [latest release](https://github.com/yonixw/NoteExt/releases/latest). GitHub
-Actions builds it automatically on every push to `master`. The release is named after the
-manifest version, so bump `version` in `manifest.json` to cut a new one.
+Get the zip from the [latest release](https://github.com/yonixw/NoteExt/releases/latest).
+
+Releases are built by GitHub Actions on every push to `master` and named after the manifest
+version (`v1.0`, `v1.1`, ...). A published release is **never overwritten**:
+- **New version** in `manifest.json`: the zip is built and published as a new release, and the run
+  shows a green ✓.
+- **Version already released**: nothing is built. The run shows a warning ("bump the version") and
+  cancels itself, so the commit gets a grey ⊘.
 
 ## Install (developer mode)
 

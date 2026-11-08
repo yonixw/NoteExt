@@ -1,6 +1,9 @@
-# Zips the extension and publishes it as the latest GitHub release.
-# Release tag = "v" + manifest.json version. Same version again -> the zip on that release is replaced;
-# bump the version in manifest.json to create a new release.
+# Zips the extension and publishes it as a GitHub release named "v" + manifest.json version.
+#
+# Releases are never overwritten (they are the source of truth, e.g. for store uploads).
+# If the release for the current version already exists, the run does not build anything:
+# it shows a warning ("bump the version") and cancels itself, so the commit gets a grey ⊘
+# instead of a green ✓ or a red ✗. Bump "version" in manifest.json to publish a new zip.
 name: Release
 
 on:
@@ -12,7 +15,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # create releases
+  actions: write  # let the run cancel itself
 
 concurrency:
   group: release
@@ -24,30 +28,63 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build zip
+      - name: Check version
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(jq -r .version manifest.json)
-          ZIP="NoteExt-v${VERSION}.zip"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            MSG="Release ${TAG} already exists and is never overwritten. Bump \"version\" in manifest.json to publish a new zip."
+            echo "::warning title=Nothing released::${MSG}"
+            {
+              echo "### ⊘ Nothing released"
+              echo ""
+              echo "${MSG}"
+              echo ""
+              echo "Existing release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${TAG}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Will publish ${TAG}" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Release exists -> cancel this run (grey ⊘). Later steps are skipped by their `if` anyway,
+      # so nothing can be overwritten even if the cancel is slow or fails (then the run ends red).
+      - name: Cancel (version already released)
+        if: steps.check.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+          sleep 300 # wait here until the cancel lands, so the run doesn't finish as green
+          echo "::error::Could not cancel the run; failing instead. Nothing was released."
+          exit 1
+
+      - name: Build zip
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          ZIP="NoteExt-${{ steps.check.outputs.tag }}.zip"
           mkdir -p dist
           # Only what the extension needs at runtime (no media/, tools/, .github/).
           zip -r -X "dist/${ZIP}" manifest.json *.js *.html *.css icons README.md
           unzip -l "dist/${ZIP}"
-          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "ZIP=${ZIP}" >> "$GITHUB_ENV"
 
       - name: Publish release
+        if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.tag }}
         run: |
-          TAG="v${VERSION}"
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" "dist/${ZIP}" --clobber
-            echo "Updated ${ZIP} on existing release ${TAG}"
-          else
-            gh release create "$TAG" "dist/${ZIP}" \
-              --target "$GITHUB_SHA" \
-              --title "NoteExt ${TAG}" \
-              --latest \
-              --notes "Install: unzip, open chrome://extensions, enable Developer mode, click **Load unpacked** and pick the unzipped folder. Built from ${GITHUB_SHA::7}."
-            echo "Created release ${TAG}"
-          fi
+          # `gh release create` fails if the tag appeared meanwhile - it never overwrites.
+          gh release create "$TAG" "dist/${ZIP}" \
+            --target "$GITHUB_SHA" \
+            --title "NoteExt ${TAG}" \
+            --latest \
+            --notes "Install: unzip, open chrome://extensions, enable Developer mode, click **Load unpacked** and pick the unzipped folder. Built from ${GITHUB_SHA::7}."
+          echo "Published ${TAG}" >> "$GITHUB_STEP_SUMMARY"
