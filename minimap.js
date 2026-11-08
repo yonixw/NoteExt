@@ -47,9 +47,12 @@
   function geometry(key) {
     if (key === 'doc') {
       const se = document.scrollingElement || document.documentElement;
-      const de = document.documentElement;
-      const viewH = de.clientHeight; // viewport minus a horizontal scrollbar
-      return { right: de.clientWidth, top: 0, height: viewH, total: se.scrollHeight, scrollTop: se.scrollTop, contentTop: -se.scrollTop };
+      // Viewport size without scrollbars. In quirks mode (pages with no <!DOCTYPE>, e.g. Hacker News)
+      // <html>.clientHeight is the whole page height, and <body> reports the viewport instead.
+      const vp = document.compatMode === 'BackCompat' && document.body ? document.body : document.documentElement;
+      const viewH = vp.clientHeight || innerHeight;
+      const viewW = vp.clientWidth || innerWidth;
+      return { right: viewW, top: 0, height: viewH, total: se.scrollHeight, scrollTop: se.scrollTop, contentTop: -se.scrollTop };
     }
     const r = key.getBoundingClientRect();
     const top = r.top + key.clientTop;
