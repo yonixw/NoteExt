@@ -250,6 +250,7 @@ function renderEditor() {
     h('div', { class: 'field' },
       h('label', {}, h('input', { type: 'checkbox', checked: n.enabled !== false, onchange: (e) => { n.enabled = e.target.checked; touch(n); } }), 'Enabled'),
       h('span', { class: 'spacer' }),
+      h('button', { title: 'Copy this note (title and label get “(2)”)', onclick: () => duplicate(n) }, '⧉ Duplicate'),
       h('button', { class: 'danger', onclick: (e) => {
         const btn = e.currentTarget;
         if (!btn.dataset.armed) {
@@ -299,7 +300,10 @@ function renderEditor() {
           }) }, '✱'),
         h('button', { class: 'link icon', title: 'Remove', onclick: () => {
           n.target.selectors.splice(i, 1);
-          if (n.target.active >= n.target.selectors.length) n.target.active = 0;
+          const a = n.target.active || 0;
+          // Keep the same selector chosen: shift up if a row above it was removed.
+          if (i < a) n.target.active = a - 1;
+          else if (a >= n.target.selectors.length) n.target.active = Math.max(0, n.target.selectors.length - 1);
           rerender();
         } }, '✕')));
     return row;
@@ -391,6 +395,23 @@ function renderEditor() {
 
   ed.replaceChildren(head, text, page, element, marker, conds);
   refreshStatus();
+}
+
+// "Name" -> "Name (2)", "Name (2)" -> "Name (3)".
+const bumpCopy = (s) => {
+  const m = /^(.*) \((\d+)\)$/.exec(s || '');
+  return m ? `${m[1]} (${Number(m[2]) + 1})` : `${s || ''} (2)`.trim();
+};
+function duplicate(n) {
+  const copy = structuredClone(n);
+  copy.id = NX.uid();
+  copy.title = bumpCopy(n.title);
+  if (copy.marker.label) copy.marker.label = bumpCopy(copy.marker.label); // empty label stays empty (plain dot)
+  copy.conditions.forEach((c) => { c.id = NX.uid(); }); // internal ids must be unique
+  copy.createdAt = copy.updatedAt = Date.now();
+  notes.splice(notes.indexOf(n) + 1, 0, copy);
+  save(true);
+  select(copy.id);
 }
 
 // ---------- selector widening (* wildcards -> starts-with / contains / ends-with) ----------
