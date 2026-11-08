@@ -7,6 +7,12 @@
 </head>
 <body>
   <header>
+    <div class="row master">
+      <label class="switch" title="Turn every note on this browser on or off at once (each note keeps its own Enabled setting)">
+        <input type="checkbox" id="masterSwitch" checked><span class="track"></span>
+        <span id="masterText">Notes on</span>
+      </label>
+    </div>
     <div class="row">
       <select id="noteSelect" title="All notes"></select>
       <button id="newBtn" class="primary" title="Pick an element on the page and create a note for it">+ New</button>

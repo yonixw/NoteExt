@@ -9,8 +9,12 @@ NX.SETTINGS_KEY = 'settings';
 NX.uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 // "https://site.com/path*" -> RegExp. Only '*' is special.
-NX.globToRegex = (glob) =>
-  new RegExp('^' + glob.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
+NX.globToRegex = (glob, flags = 's') =>
+  new RegExp('^' + glob.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$', flags);
+
+// Equality where '*' in the pattern means "anything": abc* starts with, *abc ends with, *abc* contains.
+NX.wildEq = (pattern, s) =>
+  pattern.includes('*') ? NX.globToRegex(pattern).test(s) : pattern === s;
 
 NX.urlMatches = (pattern, url) => {
   if (!pattern) return false;
@@ -27,19 +31,19 @@ NX.CHECKS = [
   { id: 'notExists', label: 'element does not exist', needsSel: true },
   { id: 'visible', label: 'element is visible', needsSel: true },
   { id: 'hidden', label: 'element is hidden / missing', needsSel: true },
-  { id: 'textEquals', label: 'text equals', needsSel: true, needsValue: true },
+  { id: 'textEquals', label: 'text equals (* wildcard)', needsSel: true, needsValue: true },
   { id: 'textContains', label: 'text contains', needsSel: true, needsValue: true },
   { id: 'textMatches', label: 'text matches regex', needsSel: true, needsValue: true },
-  { id: 'valueEquals', label: 'value / selected option equals', needsSel: true, needsValue: true },
+  { id: 'valueEquals', label: 'value / selected option equals (* wildcard)', needsSel: true, needsValue: true },
   { id: 'valueContains', label: 'value / selected option contains', needsSel: true, needsValue: true },
   { id: 'checked', label: 'is checked', needsSel: true },
   { id: 'unchecked', label: 'is not checked', needsSel: true },
-  { id: 'hasClass', label: 'has class', needsSel: true, needsValue: true },
-  { id: 'notHasClass', label: 'does not have class', needsSel: true, needsValue: true },
-  { id: 'attrEquals', label: 'attribute equals (name=value)', needsSel: true, needsValue: true },
+  { id: 'hasClass', label: 'has class (* wildcard)', needsSel: true, needsValue: true },
+  { id: 'notHasClass', label: 'does not have class (* wildcard)', needsSel: true, needsValue: true },
+  { id: 'attrEquals', label: 'attribute equals (name=value, * wildcard)', needsSel: true, needsValue: true },
   { id: 'linkVisited', label: 'link was visited (href or URL in value)', needsSel: false, needsValue: false, optionalSel: true },
   { id: 'linkNotVisited', label: 'link was NOT visited', needsSel: false, needsValue: false, optionalSel: true },
-  { id: 'urlContains', label: 'page URL contains', needsSel: false, needsValue: true },
+  { id: 'urlContains', label: 'page URL contains (* wildcard)', needsSel: false, needsValue: true },
   { id: 'urlMatches', label: 'page URL matches regex', needsSel: false, needsValue: true },
 ];
 NX.checkById = (id) => NX.CHECKS.find((c) => c.id === id) || NX.CHECKS[0];
@@ -79,5 +83,5 @@ NX.loadNotes = async () => {
 };
 NX.loadSettings = async () => {
   const r = await chrome.storage.local.get(NX.SETTINGS_KEY);
-  return Object.assign({ editMode: false, onlyThisPage: true }, r[NX.SETTINGS_KEY]);
+  return Object.assign({ allEnabled: true, editMode: false, onlyThisPage: true }, r[NX.SETTINGS_KEY]);
 };

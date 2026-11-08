@@ -110,6 +110,8 @@
   const isChecked = (el) =>
     el.checked === true || ['aria-checked', 'aria-selected', 'aria-pressed', 'aria-expanded']
       .some((a) => el.getAttribute(a) === 'true');
+  const hasClassLike = (el, k) =>
+    k.includes('*') ? Array.from(el.classList).some((c) => NX.wildEq(k, c)) : el.classList.contains(k);
   const safeRe = (v) => { try { return new RegExp(v, 'i'); } catch { return null; } };
 
   // ---------- Visited links (asked from the background, cached) ----------
@@ -155,20 +157,21 @@
       case 'notExists': return !el;
       case 'visible': return isVisible(el);
       case 'hidden': return !isVisible(el);
-      case 'textEquals': return !!el && textOf(el) === norm(v);
+      case 'textEquals': return !!el && NX.wildEq(norm(v), textOf(el));
       case 'textContains': return !!el && textOf(el).toLowerCase().includes(norm(v).toLowerCase());
       case 'textMatches': { const re = safeRe(v); return !!el && !!re && re.test(textOf(el)); }
-      case 'valueEquals': return !!el && valuesOf(el).some((x) => norm(x) === norm(v));
+      case 'valueEquals': return !!el && valuesOf(el).some((x) => NX.wildEq(norm(v), norm(x)));
       case 'valueContains': return !!el && valuesOf(el).some((x) => x.toLowerCase().includes(v.toLowerCase()));
       case 'checked': return !!el && isChecked(el);
       case 'unchecked': return !!el && !isChecked(el);
-      case 'hasClass': return !!el && v.trim().split(/\s+/).every((k) => el.classList.contains(k));
-      case 'notHasClass': return !!el && !v.trim().split(/\s+/).some((k) => k && el.classList.contains(k));
+      case 'hasClass': return !!el && v.trim().split(/\s+/).every((k) => hasClassLike(el, k));
+      case 'notHasClass': return !!el && !v.trim().split(/\s+/).some((k) => k && hasClassLike(el, k));
       case 'attrEquals': {
         if (!el) return false;
         const i = v.indexOf('=');
         if (i < 0) return el.hasAttribute(v.trim());
-        return el.getAttribute(v.slice(0, i).trim()) === v.slice(i + 1).trim();
+        const a = el.getAttribute(v.slice(0, i).trim());
+        return a != null && NX.wildEq(v.slice(i + 1).trim(), a);
       }
       case 'linkVisited':
       case 'linkNotVisited': {
@@ -176,7 +179,7 @@
         const r = isVisited(url);
         return c.check === 'linkVisited' ? r : !r;
       }
-      case 'urlContains': return location.href.includes(v);
+      case 'urlContains': return v.includes('*') ? NX.globToRegex('*' + v + '*').test(location.href) : location.href.includes(v);
       case 'urlMatches': { const re = safeRe(v); return !!re && re.test(location.href); }
       default: return chk ? false : false;
     }
@@ -197,7 +200,7 @@
   function evaluate() {
     attach();
     const url = location.href;
-    items = notes
+    items = (settings.allEnabled === false ? [] : notes)
       .filter((n) => n.enabled !== false && NX.urlMatches(n.urlPattern, url))
       .map((n) => ({ n, el: resolveTarget(n).el, met: conditionsMet(n) }));
     // Remove markers of notes no longer relevant.
@@ -563,6 +566,7 @@
         break;
       }
       case 'evalNote': sendResponse(evalNote(msg.note)); break;
+      case 'count': { const r = queryAll(msg.sel); sendResponse({ count: r === null ? null : r.length }); break; }
     }
     return false;
   });

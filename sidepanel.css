@@ -1,16 +1,20 @@
 :root {
   --bg: #ffffff; --fg: #1f2328; --muted: #6a737d; --line: #d8dee4; --soft: #f4f6f8;
   --accent: #1e88e5; --ok: #2e7d32; --bad: #c62828; --warn: #ef6c00;
+  --head-bg: #e3f0fc; --head-line: #1e88e5;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #1e1f22; --fg: #e6e6e6; --muted: #9aa0a6; --line: #3a3d42; --soft: #2a2c30;
-          --accent: #64b5f6; --ok: #81c784; --bad: #ef9a9a; --warn: #ffb74d; }
+          --accent: #64b5f6; --ok: #81c784; --bad: #ef9a9a; --warn: #ffb74d;
+          --head-bg: #1b2b3c; --head-line: #64b5f6; }
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
-header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 10px; }
+header { position: sticky; top: 0; z-index: 2; background: var(--head-bg); border-bottom: 3px solid var(--head-line);
+         padding: 8px 10px 10px; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+header select, header input[type=text] { background: var(--bg); }
 .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .row + .row { margin-top: 6px; }
 .small { font-size: 12px; }
@@ -22,6 +26,16 @@ input[type=text], input[type=number], select, textarea {
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 #noteSelect { flex: 1; }
+.switch { gap: 8px; font-weight: 600; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch .track { position: relative; width: 34px; height: 18px; border-radius: 9px; background: var(--line); transition: background .15s; }
+.switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+.switch input:checked + .track { background: var(--ok); }
+.switch input:checked + .track::after { transform: translateX(16px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+body.all-off #masterText { color: var(--bad); }
+body.all-off main, body.all-off #empty { opacity: .55; }
 button { background: var(--soft); border: 1px solid var(--line); border-radius: 5px; padding: 4px 9px; cursor: pointer; white-space: nowrap; }
 button:hover { border-color: var(--muted); }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -65,3 +79,15 @@ input[type=color] { width: 34px; height: 26px; padding: 0 2px; border: 1px solid
 .cond .field:last-child { margin-bottom: 0; }
 .cond input[type=text].mono { font: 11px Consolas, monospace; }
 .cond .res { font-weight: 700; width: 18px; text-align: center; }
+.widen { border: 1px solid var(--accent); border-radius: 6px; padding: 8px; margin: 2px 0 8px; background: var(--bg); }
+.widen .kind { font-size: 11px; color: var(--muted); width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.widen input.mono { flex: 1; font: 11px Consolas, monospace; }
+.widen .preview-row { display: flex; gap: 6px; align-items: flex-start; margin: 4px 0 6px; }
+.widen .preview { flex: 1; font: 11px Consolas, monospace; background: var(--soft); padding: 4px 6px; border-radius: 4px; word-break: break-all; }
+.cheat { margin-top: 8px; font-size: 12px; }
+.cheat summary { cursor: pointer; color: var(--accent); }
+.cheat b { display: block; margin: 8px 0 2px; font-size: 11px; color: var(--muted); }
+.cheat table { border-collapse: collapse; width: 100%; }
+.cheat td { padding: 2px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cheat td:first-child { width: 58%; }
+.cheat code { font: 11px Consolas, monospace; word-break: break-all; }

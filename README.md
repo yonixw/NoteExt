@@ -24,12 +24,20 @@ the sidebar on them. You can also just reload those pages.
   many elements it matches on the current page. The selected radio is tried first. If it matches
   nothing, the others are tried in order as fallbacks. You can edit any selector, add your own, or
   use **↑ Parent** / **↓ Child** to adjust the selection afterwards.
+- **✱ Widen**: when a selector is "almost right" (ids or links with changing numbers), click ✱
+  next to it. It lists the selector's values (id, classes, attributes, text). Put `*` where the
+  value changes: `abc*` = starts with, `*abc` = ends with, `*abc*` = contains, `a*b` = both ends.
+  It converts to CSS (`[id^="user-"]`) or XPath (`starts-with(@id, "user-")`), shows the match
+  count live, and lets you **Replace** the selector or **Add** the result as a new one. The same
+  button sits next to condition selectors. There's also a **Selector cheat sheet** under the list.
 - **Marker**: Dot or Tooltip, with label (number, emoji or text), colors and dot size. The position is
   a 3×3 anchor grid plus Outside / On edge / Inside, and an X/Y offset in px.
 - **Note**: free text. Click a marker on the page to read it. **Edit in sidebar** jumps to that note.
 - **Conditions** (all or any): element exists/visible, text equals/contains/regex, input or select
   value, checked or `aria-selected`, has class, attribute equals (`aria-selected=true` is useful for
   CSS tabs), link visited (uses browser history), page URL contains/regex. Each one shows ✓/✗ live.
+  The "equals" checks, class checks and URL contains accept `*` wildcards (`Total*`, `*error*`,
+  `aria-label=Close*`). Use the regex check for anything more complex.
 - **Page**: the URL pattern where the note applies, with `*` as a wildcard. Shortcuts: this page,
   exact URL, whole site, everywhere.
 - **Edit mode** shows every marker on the page, even when its conditions aren't met. Those markers

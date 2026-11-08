@@ -10,6 +10,14 @@ let pendingPick = null; // purpose string while the page picker is active
 let importData = null;
 let refs = {}; // live status elements of the current editor
 let lastSavedJson = '';
+const ownWrites = new Set(); // JSON snapshots we wrote whose change event hasn't come back yet
+
+// JSON with sorted object keys: chrome.storage hands values back with keys reordered,
+// so plain JSON.stringify can't tell whether a change event is our own write.
+const stableJson = (v) => JSON.stringify(v, (_k, x) =>
+  x && typeof x === 'object' && !Array.isArray(x)
+    ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]]))
+    : x);
 
 // ---------- tiny DOM helper ----------
 function h(tag, props, ...kids) {
@@ -30,7 +38,8 @@ let saveTimer = null;
 function save(now = false) {
   clearTimeout(saveTimer);
   const doSave = () => {
-    lastSavedJson = JSON.stringify(notes);
+    lastSavedJson = stableJson(notes);
+    ownWrites.add(lastSavedJson);
     chrome.storage.local.set({ [NX.STORAGE_KEY]: notes });
   };
   if (now) doSave(); else saveTimer = setTimeout(doSave, 250);
@@ -41,8 +50,10 @@ function touch(n) { n.updatedAt = Date.now(); save(); renderSelect(); }
 
 chrome.storage.onChanged.addListener((ch, area) => {
   if (area !== 'local' || !ch[NX.STORAGE_KEY]) return;
-  const json = JSON.stringify(ch[NX.STORAGE_KEY].newValue || []);
-  if (json === lastSavedJson) return; // our own write
+  const json = stableJson(ch[NX.STORAGE_KEY].newValue || []);
+  // Echo of one of our own writes (it can arrive after we've already saved newer edits) -> ignore,
+  // otherwise we would re-render from stale data, lose focus and revert what was just typed.
+  if (ownWrites.delete(json) || json === lastSavedJson) return;
   notes = (ch[NX.STORAGE_KEY].newValue || []).map(NX.normalize);
   lastSavedJson = json;
   if (!current()) selectedId = null;
@@ -148,6 +159,12 @@ $('#noteSelect').onchange = (e) => select(e.target.value || null);
 $('#newBtn').onclick = () => startPick('new', 'Click the element to attach the new note to…');
 $('#onlyPage').onchange = (e) => { settings.onlyThisPage = e.target.checked; saveSettings(); renderSelect(); };
 $('#editMode').onchange = (e) => { settings.editMode = e.target.checked; saveSettings(); };
+$('#masterSwitch').onchange = (e) => { settings.allEnabled = e.target.checked; saveSettings(); renderMaster(); };
+function renderMaster() {
+  $('#masterSwitch').checked = settings.allEnabled !== false;
+  $('#masterText').textContent = settings.allEnabled !== false ? 'Notes on' : 'All notes off';
+  document.body.classList.toggle('all-off', settings.allEnabled === false);
+}
 
 function select(id) {
   selectedId = id && notes.some((n) => n.id === id) ? id : null;
@@ -155,6 +172,7 @@ function select(id) {
   saveSettings();
   renderSelect();
   renderEditor();
+  window.scrollTo(0, 0);
   const n = current();
   if (n) sendToTab({ type: 'highlight', note: n, adopt: true }).catch(() => {});
 }
@@ -264,7 +282,7 @@ function renderEditor() {
   const selRows = n.target.selectors.map((s, i) => {
     const cnt = h('span', { class: 'count' }, '…');
     refs.counts.push(cnt);
-    return h('div', { class: 'sel-row', title: s.label || '' },
+    const row = h('div', { class: 'sel-row', title: s.label || '' },
       h('input', { type: 'radio', name: 'activeSel', checked: (n.target.active || 0) === i, title: 'Use this selector first',
         onchange: () => { n.target.active = i; touch(n); } }),
       h('select', { onchange: (e) => { s.type = e.target.value; touch(n); } },
@@ -274,11 +292,17 @@ function renderEditor() {
         oninput: (e) => { s.value = e.target.value; touch(n); },
         onfocus: () => sendToTab({ type: 'highlight', sel: s }).catch(() => {}) }),
       h('span', { style: 'display:flex;align-items:center;gap:2px' }, cnt,
+        h('button', { class: 'link icon', title: 'Widen with * (starts with / contains / ends with)',
+          onclick: () => toggleWiden(row, s, {
+            onReplace: (v) => { s.value = v; rerender(); },
+            onAdd: (v) => { n.target.selectors.push({ type: s.type, value: v, label: 'widened' }); n.target.active = n.target.selectors.length - 1; rerender(); },
+          }) }, '✱'),
         h('button', { class: 'link icon', title: 'Remove', onclick: () => {
           n.target.selectors.splice(i, 1);
           if (n.target.active >= n.target.selectors.length) n.target.active = 0;
           rerender();
         } }, '✕')));
+    return row;
   });
   const refine = async (dir) => {
     try {
@@ -299,7 +323,8 @@ function renderEditor() {
       h('button', { onclick: () => sendToTab({ type: 'highlight', note: n, adopt: true }).catch((e) => showMsg(e.message)) }, 'Show'),
       h('span', { class: 'spacer' }),
       h('button', { class: 'link', onclick: () => { n.target.selectors.push({ type: 'css', value: '', label: 'custom' }); rerender(); } }, '+ selector')),
-    h('div', { class: 'hint' }, 'The selected radio is tried first; the others are fallbacks. Numbers = matches on the current page.'));
+    h('div', { class: 'hint' }, 'The selected radio is tried first; the others are fallbacks. Numbers = matches on the current page. ✱ = widen a value with * wildcards.'),
+    cheatSheet());
 
   // --- marker
   const m = n.marker;
@@ -348,9 +373,14 @@ function renderEditor() {
           h('option', { value: 'xpath', selected: c.sel.type === 'xpath' }, 'XPath')),
         input(n, [c.sel, 'value'], { class: 'mono', placeholder: chk.optionalSel ? 'link element (or leave empty and put URL below)' : 'element selector',
           onfocus: () => sendToTab({ type: 'highlight', sel: c.sel }).catch(() => {}) }),
-        h('button', { title: 'Pick element', onclick: () => startPick('cond:' + c.id, 'Click the element this condition checks…') }, '⌖')) : null,
+        h('button', { title: 'Pick element', onclick: () => startPick('cond:' + c.id, 'Click the element this condition checks…') }, '⌖'),
+        h('button', { title: 'Widen with * (starts with / contains / ends with)',
+          onclick: (e) => toggleWiden(e.currentTarget.parentElement, c.sel, { onReplace: (v) => { c.sel.value = v; touch(n); renderEditor(); } }) }, '✱')) : null,
       chk.needsValue || chk.optionalSel ? h('div', { class: 'field' },
-        input(n, [c, 'value'], { placeholder: chk.optionalSel ? 'URL (used when no element is given)' : c.check === 'attrEquals' ? 'aria-selected=true' : 'value' })) : null);
+        input(n, [c, 'value'], { placeholder: chk.optionalSel ? 'URL (used when no element is given)'
+          : c.check === 'attrEquals' ? 'aria-selected=true   (* = wildcard)'
+          : c.check === 'textMatches' || c.check === 'urlMatches' ? 'regular expression'
+          : /Equals|Class|urlContains/.test(c.check) ? 'value   (* = wildcard: abc*  *abc  *abc*)' : 'value' })) : null);
   });
   const conds = h('section', {},
     h('h3', {}, 'Conditions', refs.cond),
@@ -359,8 +389,137 @@ function renderEditor() {
     condRows.length ? condRows : h('p', { class: 'hint' }, 'No conditions — the marker is always shown when the element exists.'),
     h('button', { onclick: () => { n.conditions.push(NX.newCondition()); rerender(); } }, '+ Add condition'));
 
-  ed.replaceChildren(head, page, element, marker, text, conds);
+  ed.replaceChildren(head, text, page, element, marker, conds);
   refreshStatus();
+}
+
+// ---------- selector widening (* wildcards -> starts-with / contains / ends-with) ----------
+const unescCss = (s) => s
+  .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_, hx) => String.fromCodePoint(parseInt(hx, 16)))
+  .replace(/\\(.)/g, '$1');
+const cssStr = (s) => '"' + s.replace(/["\\]/g, '\\$&') + '"';
+const xpStr = (s) => !s.includes('"') ? `"${s}"` : !s.includes("'") ? `'${s}'`
+  : 'concat(' + s.split('"').map((p) => `"${p}"`).join(`, '"', `) + ')';
+
+// Finds the editable values in a selector: ids, classes, attribute values, text.
+function selectorTokens(sel) {
+  const v = sel.value || '', out = [];
+  if (sel.type === 'xpath') {
+    const re = /(@[\w:-]+|normalize-space\(\s*\.?\s*\)|text\(\)|\.)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+    for (const m of v.matchAll(re))
+      out.push({ kind: m[1].startsWith('@') ? m[1].slice(1) : 'text', expr: m[1], value: m[2] ?? m[3], start: m.index, end: m.index + m[0].length });
+  } else {
+    const id = '((?:\\\\[0-9a-fA-F]{1,6}\\s?|\\\\.|[\\w-])+)';
+    const re = new RegExp(`\\[\\s*([\\w:-]+)\\s*[~|^$*]?=\\s*(?:"((?:\\\\.|[^"\\\\])*)"|'((?:\\\\.|[^'\\\\])*)'|([^\\]\\s]+))\\s*(?:[is]\\s*)?\\]|#${id}|\\.${id}`, 'g');
+    for (const m of v.matchAll(re)) {
+      const t = { start: m.index, end: m.index + m[0].length };
+      if (m[1]) Object.assign(t, { kind: m[1], value: unescCss(m[2] ?? m[3] ?? m[4]) });
+      else if (m[5]) Object.assign(t, { kind: 'id', short: true, value: unescCss(m[5]) });
+      else Object.assign(t, { kind: 'class', short: true, value: unescCss(m[6]) });
+      out.push(t);
+    }
+  }
+  return out;
+}
+function widenCss(t, p) {
+  if (!p.includes('*')) {
+    if (t.short) return (t.kind === 'id' ? '#' : '.') + CSS.escape(p);
+    return `[${t.kind}=${cssStr(p)}]`;
+  }
+  const parts = p.split('*'), last = parts.length - 1;
+  return parts.map((s, i) => !s ? ''
+    : t.kind === 'class' ? `[class*=${cssStr(s)}]` // class attr holds several names -> contains
+    : i === 0 ? `[${t.kind}^=${cssStr(s)}]`
+    : i === last ? `[${t.kind}$=${cssStr(s)}]`
+    : `[${t.kind}*=${cssStr(s)}]`).join('') || `[${t.kind}]`;
+}
+function widenXPath(t, p) {
+  const X = t.expr;
+  if (!p.includes('*')) return `${X}=${xpStr(p)}`;
+  const parts = p.split('*'), last = parts.length - 1;
+  const conds = parts.map((s, i) => !s ? ''
+    : i === 0 ? `starts-with(${X}, ${xpStr(s)})`
+    : i === last ? `substring(${X}, string-length(${X}) - ${s.length - 1}) = ${xpStr(s)}` // XPath 1.0 has no ends-with
+    : `contains(${X}, ${xpStr(s)})`).filter(Boolean);
+  if (!conds.length) return X.startsWith('@') ? X : 'true()';
+  return conds.length > 1 ? `(${conds.join(' and ')})` : conds[0];
+}
+function applyWiden(sel, toks, vals) {
+  let out = sel.value;
+  // Replace from the end so earlier positions stay valid.
+  toks.map((t, i) => [t, vals[i]]).sort((a, b) => b[0].start - a[0].start).forEach(([t, p]) => {
+    if (p === t.value) return;
+    out = out.slice(0, t.start) + (sel.type === 'xpath' ? widenXPath(t, p) : widenCss(t, p)) + out.slice(t.end);
+  });
+  return out;
+}
+function paintCount(el, c) {
+  el.textContent = c == null ? 'error' : c === 1 ? '1 ✓' : String(c);
+  el.className = 'count ' + (c == null ? 'err' : c === 0 ? 'zero' : c === 1 ? 'one' : 'many');
+  el.title = c == null ? 'Invalid selector' : c > 1 ? 'Matches several elements; the first one is used' : '';
+}
+function widenBox(sel, { onReplace, onAdd }) {
+  const toks = selectorTokens(sel);
+  const vals = toks.map((t) => t.value);
+  const preview = h('code', { class: 'preview' });
+  const cnt = h('span', { class: 'count' });
+  let result = sel.value, seq = 0;
+  const update = async () => {
+    result = applyWiden(sel, toks, vals);
+    preview.textContent = result;
+    const my = ++seq;
+    try {
+      const r = await sendToTab({ type: 'count', sel: { type: sel.type, value: result } });
+      if (my === seq) paintCount(cnt, r.count);
+    } catch { cnt.textContent = '?'; }
+  };
+  const box = h('div', { class: 'widen' },
+    h('div', { class: 'hint' }, 'Put * where the value changes:  abc* starts with · *abc ends with · *abc* contains · a*b both ends.'),
+    toks.length
+      ? toks.map((t, i) => h('div', { class: 'field' },
+          h('span', { class: 'kind', title: t.kind }, t.kind),
+          h('input', { type: 'text', class: 'mono', value: t.value, oninput: (e) => { vals[i] = e.target.value; update(); } })))
+      : h('p', { class: 'hint' }, 'No id / class / attribute / text value found in this selector — edit it by hand (see the cheat sheet).'),
+    h('div', { class: 'preview-row' }, preview, cnt),
+    h('div', { class: 'field small' },
+      h('button', { class: 'primary', onclick: () => onReplace(result) }, 'Replace'),
+      onAdd ? h('button', { onclick: () => onAdd(result) }, 'Add as new selector') : null,
+      h('button', { class: 'link', onclick: () => box.remove() }, 'Close')));
+  update();
+  return box;
+}
+function toggleWiden(afterEl, sel, opts) {
+  const next = afterEl.nextElementSibling;
+  if (next && next.classList.contains('widen')) return next.remove();
+  afterEl.after(widenBox(sel, opts));
+  afterEl.nextElementSibling.querySelector('input')?.focus();
+}
+function cheatSheet() {
+  const rows = (list) => list.map(([code, what]) => h('tr', {}, h('td', {}, h('code', {}, code)), h('td', {}, what)));
+  return h('details', { class: 'cheat' },
+    h('summary', {}, 'Selector cheat sheet'),
+    h('b', {}, 'CSS'),
+    h('table', {}, rows([
+      ['[id^="user-"]', 'id starts with'],
+      ['[id$="-btn"]', 'id ends with'],
+      ['[class*="card"]', 'class attribute contains'],
+      ['a[href*="/inbox"]', 'link whose href contains'],
+      ['div:has(> h2.title)', 'div that directly contains an h2.title'],
+      ['li:nth-of-type(2)', '2nd li among its siblings'],
+      ['ul > li / ul li', 'direct child / any descendant'],
+      ['h2 + p / h2 ~ p', 'next sibling / any later sibling'],
+    ])),
+    h('b', {}, 'XPath'),
+    h('table', {}, rows([
+      ['//div[starts-with(@id, "user-")]', 'id starts with'],
+      ['//a[contains(@href, "/inbox")]', 'href contains'],
+      ['//button[contains(normalize-space(.), "Save")]', 'text contains'],
+      ['//td[.="Total"]/following-sibling::td[1]', 'cell right after "Total"'],
+      ['//span[.="Price"]/..', 'parent of the "Price" span'],
+      ['//li[.//b[.="New"]]', 'li containing a bold "New"'],
+      ['(//div[@role="row"])[3]', '3rd match in the whole page'],
+    ])),
+    h('p', { class: 'hint' }, 'Condition values (text / value / class / attribute equals, URL contains) accept * too. For anything fancier use “text matches regex”.'));
 }
 
 // ---------- live status from the page ----------
@@ -374,12 +533,7 @@ async function refreshStatus() {
     if (!st || n !== current()) return;
     const set = (el, txt, cls) => { if (el) { el.textContent = txt; el.className = 'status ' + cls; } };
     set(refs.url, st.urlMatch ? '✓ matches this page' : '✗ not this page', st.urlMatch ? 'ok' : 'bad');
-    (refs.counts || []).forEach((el, i) => {
-      const c = st.counts[i];
-      el.textContent = c == null ? 'error' : c === 1 ? '1 ✓' : String(c);
-      el.className = 'count ' + (c == null ? 'err' : c === 0 ? 'zero' : c === 1 ? 'one' : 'many');
-      el.title = c == null ? 'Invalid selector' : c > 1 ? 'Matches several elements; the first one is used' : '';
-    });
+    (refs.counts || []).forEach((el, i) => paintCount(el, st.counts[i]));
     set(refs.target, !st.found ? '✗ not found' : st.used === (n.target.active || 0) ? (st.visible ? '✓ found' : '⚠ found but hidden')
       : `⚠ using fallback #${st.used + 1}`, !st.found ? 'bad' : st.used === (n.target.active || 0) && st.visible ? 'ok' : 'warn');
     (refs.condRes || []).forEach((el, i) => {
@@ -401,6 +555,7 @@ async function refreshStatus() {
 function renderAll() {
   $('#onlyPage').checked = !!settings.onlyThisPage;
   $('#editMode').checked = !!settings.editMode;
+  renderMaster();
   renderSelect();
   renderEditor();
 }
@@ -418,7 +573,7 @@ chrome.storage.session.onChanged.addListener((ch) => { if (ch.pendingSelect?.new
 
 (async () => {
   notes = await NX.loadNotes();
-  lastSavedJson = JSON.stringify(notes);
+  lastSavedJson = stableJson(notes);
   settings = await NX.loadSettings();
   await refreshTab();
   const { pendingSelect } = await chrome.storage.session.get('pendingSelect');
