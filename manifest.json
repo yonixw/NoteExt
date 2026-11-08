@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "NoteExt - page notes",
+  "version": "0.1.0",
+  "description": "Pin dots and tooltips with notes and conditions onto elements of any website.",
+  "permissions": ["storage", "sidePanel", "scripting", "history", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Open NoteExt sidebar" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["shared.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

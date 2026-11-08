@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NoteExt</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <div class="row">
+      <select id="noteSelect" title="All notes"></select>
+      <button id="newBtn" class="primary" title="Pick an element on the page and create a note for it">+ New</button>
+    </div>
+    <div class="row small">
+      <label><input type="checkbox" id="onlyPage"> This page only</label>
+      <label title="Show every marker for this page, even when its conditions are not met"><input type="checkbox" id="editMode"> Edit mode</label>
+      <span class="spacer"></span>
+      <button id="exportBtn" class="link">Export</button>
+      <button id="importBtn" class="link">Import</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <div id="importBar" class="row small" hidden>
+      <span>Import <b id="importName"></b>:</span>
+      <button id="importMerge">Merge</button>
+      <button id="importReplace" class="danger">Replace all</button>
+      <button id="importCancel" class="link">Cancel</button>
+    </div>
+  </header>
+
+  <div id="banner" hidden><span id="bannerText"></span> <button id="bannerCancel" class="link">Cancel</button></div>
+  <div id="msg" hidden></div>
+
+  <main id="editor"></main>
+  <div id="empty" class="empty">
+    <p>No note selected.</p>
+    <p>Click <b>+ New</b>, then click any element on the page.</p>
+  </div>
+
+  <script src="shared.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

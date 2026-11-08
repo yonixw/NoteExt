@@ -1,0 +1,67 @@
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #6a737d; --line: #d8dee4; --soft: #f4f6f8;
+  --accent: #1e88e5; --ok: #2e7d32; --bad: #c62828; --warn: #ef6c00;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1e1f22; --fg: #e6e6e6; --muted: #9aa0a6; --line: #3a3d42; --soft: #2a2c30;
+          --accent: #64b5f6; --ok: #81c784; --bad: #ef9a9a; --warn: #ffb74d; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 10px; }
+.row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.row + .row { margin-top: 6px; }
+.small { font-size: 12px; }
+.spacer { flex: 1; }
+label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+input, select, textarea, button { font: inherit; color: inherit; }
+input[type=text], input[type=number], select, textarea {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; min-width: 0;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#noteSelect { flex: 1; }
+button { background: var(--soft); border: 1px solid var(--line); border-radius: 5px; padding: 4px 9px; cursor: pointer; white-space: nowrap; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--bad); }
+button.link { background: none; border: 0; color: var(--accent); padding: 2px 4px; }
+button.icon { padding: 2px 7px; }
+button[disabled] { opacity: .5; cursor: default; }
+#banner { background: #1e88e5; color: #fff; padding: 8px 10px; }
+#banner .link { color: #fff; text-decoration: underline; }
+#msg { padding: 6px 10px; background: #fff3e0; color: #8a4b00; font-size: 12px; }
+main { padding: 4px 10px 40px; }
+.empty { color: var(--muted); padding: 30px 16px; text-align: center; }
+section { border-bottom: 1px solid var(--line); padding: 10px 0; }
+section:last-child { border-bottom: 0; }
+h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+h3 .status { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.field { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.field > input[type=text], .field > select.grow, .field > textarea { flex: 1; }
+.title-input { font-size: 15px; font-weight: 600; }
+textarea { width: 100%; resize: vertical; min-height: 120px; }
+.sel-row { display: grid; grid-template-columns: auto 52px 1fr auto; gap: 4px; align-items: center; margin-bottom: 4px; }
+.sel-row input[type=text] { font: 11px Consolas, monospace; width: 100%; }
+.sel-row select { font-size: 11px; padding: 3px 2px; }
+.count { font-size: 11px; min-width: 34px; text-align: right; color: var(--muted); }
+.count.one { color: var(--ok); }
+.count.zero, .count.err { color: var(--bad); }
+.count.many { color: var(--warn); }
+.hint { color: var(--muted); font-size: 11px; }
+.ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+.grid9 { display: grid; grid-template-columns: repeat(3, 26px); gap: 3px; padding: 3px; border: 1px dashed var(--line); border-radius: 6px; }
+.grid9 button { width: 26px; height: 22px; padding: 0; font-size: 11px; }
+.grid9 button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pos { display: flex; gap: 12px; align-items: flex-start; }
+.pos .col { display: flex; flex-direction: column; gap: 6px; }
+.pos input[type=number] { width: 60px; }
+input[type=color] { width: 34px; height: 26px; padding: 0 2px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button.on { background: var(--accent); color: #fff; }
+.cond { border: 1px solid var(--line); border-radius: 6px; padding: 6px; margin-bottom: 6px; background: var(--soft); }
+.cond .field:last-child { margin-bottom: 0; }
+.cond input[type=text].mono { font: 11px Consolas, monospace; }
+.cond .res { font-weight: 700; width: 18px; text-align: center; }
