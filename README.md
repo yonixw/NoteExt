@@ -3,6 +3,8 @@
 Pin notes onto elements of any website: a dot (inbox-badge style) or a tooltip, with free text,
 conditions, and a sidebar editor. No build step and no libraries: copy the folder and load it.
 
+Source: https://github.com/yonixw/NoteExt
+
 ## Install (developer mode)
 
 1. Open `chrome://extensions` (or `edge://extensions`).
