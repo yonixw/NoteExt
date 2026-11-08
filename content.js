@@ -9,6 +9,20 @@
   let items = []; // [{n, el, met}] for notes matching this URL
   const markerEls = new Map(); // note id -> div
 
+  // ---------- Frames ----------
+  // This script runs in every frame. A note with no `frame` belongs to the top page; a note with
+  // `frame` (a URL pattern) belongs to the iframe whose URL matches it, on a page matching urlPattern.
+  const isTop = window === window.top;
+  let topUrl = isTop ? location.href : '';
+  const pageUrl = () => (isTop ? location.href : topUrl);
+  const inThisFrame = (n) => (isTop ? !n.frame : !!n.frame && NX.urlMatches(n.frame, location.href));
+  function refreshTopUrl() {
+    if (isTop) return;
+    chrome.runtime.sendMessage({ type: 'tabUrl' }).then((u) => {
+      if (u && u !== topUrl) { topUrl = u; scheduleEval(); }
+    }).catch(() => {});
+  }
+
   // ---------- Shadow DOM overlay (isolated from page CSS) ----------
   const host = document.createElement('nx-notes-root');
   host.style.cssText = 'all:initial;position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;';
@@ -199,15 +213,104 @@
 
   function evaluate() {
     attach();
-    const url = location.href;
+    const url = pageUrl();
     items = (settings.allEnabled === false ? [] : notes)
-      .filter((n) => n.enabled !== false && NX.urlMatches(n.urlPattern, url))
+      .filter((n) => n.enabled !== false && inThisFrame(n) && NX.urlMatches(n.urlPattern, url))
       .map((n) => ({ n, el: resolveTarget(n).el, met: conditionsMet(n) }));
-    // Remove markers of notes no longer relevant.
-    const keep = new Set(items.map((i) => i.n.id));
+    // Remove markers of notes no longer relevant (or that became highlights).
+    const keep = new Set(items.filter((i) => i.n.marker.kind !== 'highlight').map((i) => i.n.id));
     for (const [id, div] of markerEls) if (!keep.has(id)) { div.remove(); markerEls.delete(id); }
-    for (const it of items) updateMarker(it);
+    for (const it of items) if (it.n.marker.kind !== 'highlight') updateMarker(it);
     if (bubble.dataset.id && !keep.has(bubble.dataset.id)) hideBubble();
+    applyHighlights();
+  }
+
+  // ---------- Highlighter marker: recolor the element itself ----------
+  // The element gets data-nx-hl="<note ids>" and one <style> in the page holds the colors,
+  // so removing a highlight is just removing the attribute (the page's own styles are untouched).
+  const HL_ATTR = 'data-nx-hl';
+  const hlStyle = document.createElement('style');
+  hlStyle.id = 'nx-notes-highlights';
+  let hlMarked = new Set();
+  let hlNames = new Set();
+
+  // ---------- Text patterns inside an element ----------
+  // '*' at the start/end of the pattern = the rest of that word; '*' in the middle = anything.
+  // Spaces match any whitespace; case-insensitive.
+  function patternRegex(p) {
+    const t = (p || '').trim();
+    const core = t.replace(/^\*+|\*+$/g, '');
+    if (!core) return null;
+    const esc = (s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    const body = core.split('*').map(esc).join('[\\s\\S]*?');
+    return new RegExp((t.startsWith('*') ? '\\S*' : '') + body + (t.endsWith('*') ? '\\S*' : ''), 'gi');
+  }
+  const TEXT_SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
+  function textRanges(el, pattern, all) {
+    const re = patternRegex(pattern);
+    if (!re) return [];
+    const nodes = [], starts = [];
+    let text = '';
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: (t) => (TEXT_SKIP.has(t.parentNode.nodeName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    for (let t; (t = w.nextNode());) { nodes.push(t); starts.push(text.length); text += t.data; }
+    // Text offset -> [node, offset]. An end offset sticks to the node it ends in.
+    const at = (off, isEnd) => {
+      let i = nodes.length - 1;
+      while (i > 0 && (isEnd ? starts[i] >= off : starts[i] > off)) i--;
+      return [nodes[i], off - starts[i]];
+    };
+    const out = [];
+    for (const m of text.matchAll(re)) {
+      if (!m[0].length) continue;
+      const r = document.createRange();
+      r.setStart(...at(m.index, false));
+      r.setEnd(...at(m.index + m[0].length, true));
+      out.push(r);
+      if (!all) break;
+    }
+    return out;
+  }
+  // Colors end up inside a page stylesheet, so only accept plain color values (imported JSON could hold anything).
+  const safeColor = (c, fallback) =>
+    typeof c === 'string' && /^(#[0-9a-f]{3,8}|[a-z]+|rgba?\([\d\s.,%]+\)|hsla?\([\d\s.,%deg]+\))$/i.test(c.trim()) ? c.trim() : fallback;
+  function applyHighlights() {
+    const want = new Map(); // element -> [note ids]
+    const css = [];
+    const names = new Set(); // CSS highlight names registered this round
+    for (const { n, el, met } of items) {
+      if (n.marker.kind !== 'highlight' || !el) continue;
+      if (!met && !settings.editMode) continue;
+      if (!/^[\w-]+$/.test(n.id)) continue;
+      want.set(el, [...(want.get(el) || []), n.id]);
+      const s = `[${HL_ATTR}~="${n.id}"]`;
+      const sel = n.marker.deep !== false ? `${s}, ${s} *` : s;
+      const bg = safeColor(n.marker.color, '#ffeb3b'), fg = safeColor(n.marker.textColor, '#000000');
+      if (met && (n.marker.text || '').trim()) {
+        // Only the matching text: painted with the CSS Custom Highlight API (no DOM changes).
+        if (window.Highlight && CSS.highlights) {
+          const name = 'nx-' + n.id;
+          CSS.highlights.set(name, new Highlight(...textRanges(el, n.marker.text, n.marker.allMatches)));
+          names.add(name);
+          css.push(`::highlight(${name}) { background-color: ${bg}; color: ${fg}; }`);
+        }
+      } else if (met) css.push(`${sel} { background-color: ${bg} !important; color: ${fg} !important; }`);
+      else css.push(`${s} { outline: 2px dashed ${bg} !important; outline-offset: 1px !important; }`);
+      if (settings.editMode && settings.selectedId === n.id)
+        css.push(`${s} { box-shadow: 0 0 0 3px #1e88e5 !important; }`);
+    }
+    for (const el of hlMarked) if (!want.has(el)) el.removeAttribute(HL_ATTR);
+    for (const [el, ids] of want) {
+      const v = ids.join(' ');
+      if (el.getAttribute(HL_ATTR) !== v) el.setAttribute(HL_ATTR, v);
+    }
+    hlMarked = new Set(want.keys());
+    for (const nm of hlNames) if (!names.has(nm)) CSS.highlights.delete(nm);
+    hlNames = names;
+    const text = css.join('\n');
+    if (hlStyle.textContent !== text) hlStyle.textContent = text;
+    if (text && !hlStyle.isConnected) (document.head || document.documentElement).appendChild(hlStyle);
   }
 
   function updateMarker({ n, met }) {
@@ -252,7 +355,7 @@
   function layout() {
     for (const { n, el, met } of items) {
       const div = markerEls.get(n.id);
-      if (!div) continue;
+      if (!div || n.marker.kind === 'highlight') continue;
       const show = el && (met || settings.editMode) && !picking;
       const r = show ? el.getBoundingClientRect() : null;
       if (!show || (r.width === 0 && r.height === 0)) { div.style.display = 'none'; continue; }
@@ -451,17 +554,19 @@
     picking = { purpose, cur: null, stack: [] };
     hideBubble();
     window.addEventListener('mousemove', onPickMove, true);
+    document.addEventListener('mouseout', onPickOut, true);
     window.addEventListener('keydown', onPickKey, true);
     window.addEventListener('wheel', onPickWheel, { capture: true, passive: false });
     for (const t of BLOCK) window.addEventListener(t, onPickClick, true);
     hint.innerHTML = '<b>Click</b> an element to select it · <b>Alt+wheel</b> or <b>↑/↓</b> parent/child · <b>Enter</b> select · <b>Esc</b> cancel';
-    hint.style.display = 'block';
+    hint.style.display = isTop ? 'block' : 'none'; // one hint for the whole tab
     layout();
   }
   function stopPick(notifyCancel) {
     if (!picking) return;
     const purpose = picking.purpose;
     window.removeEventListener('mousemove', onPickMove, true);
+    document.removeEventListener('mouseout', onPickOut, true);
     window.removeEventListener('keydown', onPickKey, true);
     window.removeEventListener('wheel', onPickWheel, true);
     for (const t of BLOCK) window.removeEventListener(t, onPickClick, true);
@@ -485,6 +590,13 @@
     if (!el || el === host || (picking.stack.length && picking.stack[0] === el)) return;
     picking.stack = [el];
     setPickCur(el);
+  }
+  // Mouse left this document (e.g. moved into an iframe, whose own script takes over).
+  function onPickOut(e) {
+    if (e.relatedTarget) return;
+    picking.cur = null;
+    picking.stack = [];
+    pickBox.style.display = 'none';
   }
   function goParent() {
     const p = picking.cur && picking.cur.parentElement;
@@ -516,8 +628,7 @@
   function finishPick(el) {
     const purpose = picking.purpose;
     stopPick(false);
-    lastPicked = el;
-    refineStack = [];
+    if (!String(purpose).startsWith('cond:')) { lastPicked = el; refineStack = []; } // Parent/Child act on the note's element
     highlight(el, 1200, false);
     chrome.runtime.sendMessage({ type: 'picked', purpose, info: describe(el) }).catch(() => {});
   }
@@ -533,8 +644,10 @@
     });
     return {
       url: location.href,
-      urlMatch: NX.urlMatches(n.urlPattern, location.href),
+      urlMatch: NX.urlMatches(n.urlPattern, pageUrl()),
+      frameUrl: isTop ? '' : location.href,
       counts, used: t.used, found: !!t.el, visible: isVisible(t.el),
+      textCount: t.el && (n.marker.text || '').trim() ? textRanges(t.el, n.marker.text, true).length : null,
       conds, met: conditionsMet(n),
     };
   }
@@ -598,7 +711,8 @@
   new MutationObserver(scheduleEval).observe(document, {
     subtree: true, childList: true, attributes: true, characterData: true,
   });
-  setInterval(scheduleEval, 1000); // safety net (SPA navigation, CSS-only changes, ...)
+  setInterval(() => { refreshTopUrl(); scheduleEval(); }, 1000); // safety net (SPA navigation, CSS-only changes, ...)
 
+  refreshTopUrl();
   reload();
 })();

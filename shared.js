@@ -22,7 +22,10 @@ NX.urlMatches = (pattern, url) => {
 };
 
 NX.defaultUrlPattern = (url) => {
-  try { const u = new URL(url); return u.origin + u.pathname + '*'; } catch { return url || '*'; }
+  try {
+    const u = new URL(url);
+    return u.origin === 'null' ? url : u.origin + u.pathname + '*'; // about:blank, about:srcdoc, data: ...
+  } catch { return url || '*'; }
 };
 
 // Condition checks. needsSel: requires an element selector. needsValue: uses the value field.
@@ -52,16 +55,30 @@ NX.newNote = (url) => ({
   id: NX.uid(),
   title: 'New note',
   urlPattern: NX.defaultUrlPattern(url),
+  frame: '', // '' = top page, otherwise URL pattern of the iframe the element lives in
   enabled: true,
   target: { selectors: [], active: 0 },
   anchor: { point: 'top-right', mode: 'edge', dx: 0, dy: 0 },
-  marker: { kind: 'dot', label: '', color: '#e53935', textColor: '#ffffff', size: 14 },
+  // kind: 'dot' | 'tooltip' | 'highlight' (recolors the element; deep = children too;
+  // text = only text matching this pattern inside the element, allMatches = every match vs first)
+  marker: { kind: 'dot', label: '', color: '#e53935', textColor: '#ffffff', size: 14, deep: true, text: '', allMatches: false },
   text: '',
   conditionMode: 'all',
   conditions: [],
   createdAt: Date.now(),
   updatedAt: Date.now(),
 });
+
+// [background, text, name]
+NX.COLOR_PRESETS = [
+  ['#ffeb3b', '#000000', 'Classic yellow'],
+  ['#b9f6ca', '#000000', 'Green'],
+  ['#ff80ab', '#000000', 'Pink'],
+  ['#ffcc80', '#000000', 'Orange'],
+  ['#80d8ff', '#000000', 'Blue'],
+  ['#e53935', '#ffffff', 'Red'],
+  ['#212121', '#ffeb3b', 'Dark'],
+];
 
 NX.newCondition = () => ({ id: NX.uid(), check: 'exists', sel: { type: 'css', value: '' }, value: '' });
 

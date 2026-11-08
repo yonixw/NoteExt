@@ -18,6 +18,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     ).then((pairs) => sendResponse(Object.fromEntries(pairs)));
     return true;
   }
+  if (msg.type === 'tabUrl') {
+    // Iframes can't read the top page's URL (cross-origin), so they ask here.
+    sendResponse(sender.tab ? sender.tab.url : '');
+    return false;
+  }
   if (msg.type === 'editNote') {
     // Remember which note to show, so a freshly opened panel can pick it up.
     chrome.storage.session.set({ pendingSelect: msg.id });

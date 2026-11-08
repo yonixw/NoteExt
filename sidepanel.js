@@ -70,18 +70,32 @@ async function refreshTab() {
   tab = t ? { id: t.id, url: t.url || '' } : { id: null, url: '' };
   return changed;
 }
-async function sendToTab(msg) {
+// Frame of a note: '' = top page (frameId 0), otherwise the iframe whose URL matches the pattern.
+async function frameIdFor(pattern) {
+  if (!pattern) return 0;
+  const frames = (await chrome.webNavigation.getAllFrames({ tabId: tab.id })) || [];
+  const f = frames.find((x) => x.frameId !== 0 && NX.urlMatches(pattern, x.url));
+  if (!f) throw new Error('this note’s iframe is not on the page');
+  return f.frameId;
+}
+// where: 'note' (frame of the current note, default) | 'all' (every frame) | a frameId
+async function sendToTab(msg, where = 'note') {
   if (tab.id == null) throw new Error('No active tab');
+  const frameId = where === 'all' ? undefined : typeof where === 'number' ? where : await frameIdFor(current()?.frame || '');
+  const send = () => frameId === undefined
+    ? chrome.tabs.sendMessage(tab.id, msg)
+    : chrome.tabs.sendMessage(tab.id, msg, { frameId });
   try {
-    return await chrome.tabs.sendMessage(tab.id, msg);
+    return await send();
   } catch {
     // Content script not there yet (tab opened before the extension was loaded) -> inject it.
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['shared.js', 'content.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['shared.js', 'content.js'] })
+        .catch(() => chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['shared.js', 'content.js'] }));
     } catch (e) {
       throw new Error('Cannot run on this page (' + (e.message || e) + ')');
     }
-    return await chrome.tabs.sendMessage(tab.id, msg);
+    return await send();
   }
 }
 function showMsg(text) {
@@ -93,32 +107,35 @@ function showMsg(text) {
 
 async function startPick(purpose, label) {
   try {
-    await sendToTab({ type: 'startPick', purpose });
+    await sendToTab({ type: 'startPick', purpose }, 'all'); // the user may click inside any iframe
     pendingPick = purpose;
     $('#bannerText').textContent = label || 'Click an element on the page…';
     $('#banner').hidden = false;
   } catch (e) { showMsg(e.message); }
 }
 function endPickUi() { pendingPick = null; $('#banner').hidden = true; }
-$('#bannerCancel').onclick = () => { sendToTab({ type: 'cancelPick' }).catch(() => {}); endPickUi(); };
+$('#bannerCancel').onclick = () => { sendToTab({ type: 'cancelPick' }, 'all').catch(() => {}); endPickUi(); };
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === 'editNote') { select(msg.id); return; }
   if (msg.type !== 'picked' || msg.purpose !== pendingPick) return;
   if (sender.tab && sender.tab.id !== tab.id) return;
   endPickUi();
+  sendToTab({ type: 'cancelPick' }, 'all').catch(() => {}); // stop picking in the other frames
   if (msg.cancelled) return;
-  onPicked(msg.purpose, msg.info);
+  const frame = !sender.frameId ? '' : NX.defaultUrlPattern(sender.url || '');
+  onPicked(msg.purpose, msg.info, frame);
 });
 
 function selectorsFromInfo(info) {
   return info.selectors.map(({ type, value, label }) => ({ type, value, label }));
 }
-function onPicked(purpose, info) {
+function onPicked(purpose, info, frame) {
   if (!info.selectors.length) return showMsg('Could not build a selector for that element.');
   if (purpose === 'new') {
     const n = NX.newNote(tab.url);
     n.title = (info.text || info.summary).slice(0, 40) || 'New note';
+    n.frame = frame;
     n.target.selectors = selectorsFromInfo(info);
     notes.push(n);
     save(true);
@@ -128,9 +145,11 @@ function onPicked(purpose, info) {
   const n = current();
   if (!n) return;
   if (purpose === 'target') {
+    n.frame = frame;
     n.target.selectors = selectorsFromInfo(info);
     n.target.active = 0;
   } else if (purpose.startsWith('cond:')) {
+    if (frame !== (n.frame || '')) return showMsg('A condition’s element must be in the same frame (page or iframe) as the note’s element.');
     const c = n.conditions.find((x) => x.id === purpose.slice(5));
     if (c) c.sel = { type: info.selectors[0].type, value: info.selectors[0].value };
   }
@@ -275,7 +294,10 @@ function renderEditor() {
           ['Exact URL', () => tab.url],
           ['Whole site', () => { try { return new URL(tab.url).origin + '/*'; } catch { return '*'; } }],
           ['Everywhere', () => '*']]
-        .map(([label, f]) => h('button', { class: 'link', onclick: () => { n.urlPattern = f(); refs.urlInput.value = n.urlPattern; touch(n); refreshStatus(); } }, label))));
+        .map(([label, f]) => h('button', { class: 'link', onclick: () => { n.urlPattern = f(); refs.urlInput.value = n.urlPattern; touch(n); refreshStatus(); } }, label))),
+    n.frame ? h('div', { class: 'field small', title: 'The element lives inside an iframe whose URL matches this pattern' },
+      h('span', { class: 'hint' }, 'In iframe:'),
+      input(n, [n, 'frame'], { class: 'mono' })) : null);
 
   // --- element
   refs.target = h('span', { class: 'status' });
@@ -311,7 +333,7 @@ function renderEditor() {
   const refine = async (dir) => {
     try {
       const r = await sendToTab({ type: 'refine', dir });
-      if (r.error) return showMsg(r.error);
+      if (!r || r.error) return showMsg((r && r.error) || 'Pick an element first');
       n.target.selectors = selectorsFromInfo(r.info);
       n.target.active = 0;
       rerender();
@@ -332,17 +354,42 @@ function renderEditor() {
 
   // --- marker
   const m = n.marker;
+  const isHl = m.kind === 'highlight';
+  const setKind = (v) => {
+    // Switching to the highlighter with the default red dot colors -> start with classic yellow/black.
+    if (v === 'highlight' && m.color === '#e53935' && m.textColor === '#ffffff') { m.color = '#ffeb3b'; m.textColor = '#000000'; }
+    m.kind = v;
+    if (v === 'tooltip' && n.anchor.mode === 'edge') n.anchor.mode = 'outside';
+    rerender();
+  };
   const marker = h('section', {},
     h('h3', {}, 'Marker'),
     h('div', { class: 'field' },
-      seg([['dot', '● Dot'], ['tooltip', '💬 Tooltip']], m.kind, (v) => { m.kind = v; if (v === 'tooltip' && n.anchor.mode === 'edge') n.anchor.mode = 'outside'; rerender(); }),
+      seg([['dot', '● Dot'], ['tooltip', '💬 Tooltip'], ['highlight', '🖍 Highlight']], m.kind, setKind)),
+    h('div', { class: 'field' },
       h('input', { type: 'color', value: m.color, title: 'Background', oninput: (e) => { m.color = e.target.value; touch(n); } }),
       h('input', { type: 'color', value: m.textColor, title: 'Text color', oninput: (e) => { m.textColor = e.target.value; touch(n); } }),
+      h('div', { class: 'presets' }, NX.COLOR_PRESETS.map(([bg, fg, name]) =>
+        h('button', { class: 'preset' + (m.color === bg && m.textColor === fg ? ' on' : ''), title: name, style: `background:${bg};color:${fg}`,
+          onclick: () => { m.color = bg; m.textColor = fg; rerender(); } }, 'Aa'))),
       m.kind === 'dot' ? h('label', { class: 'small', title: 'Size in px' }, 'Size',
         input(n, [m, 'size'], { type: 'number', min: 6, max: 60, style: 'width:52px' })) : null),
-    h('div', { class: 'field' },
+    isHl ? h('div', { class: 'field' },
+      input(n, [m, 'text'], { class: 'mono', placeholder: 'Text pattern (empty = whole element), e.g.  Total: *' }),
+      refs.textCount = h('span', { class: 'count' })) : null,
+    isHl ? h('div', { class: 'field small' },
+      h('label', { title: 'Unchecked: only the first match' },
+        h('input', { type: 'checkbox', checked: !!m.allMatches, onchange: (e) => { m.allMatches = e.target.checked; touch(n); } }),
+        'All matches'),
+      h('label', { title: 'Whole-element mode: also recolor everything inside the element (otherwise children with their own colors keep them)' },
+        h('input', { type: 'checkbox', checked: m.deep !== false, onchange: (e) => { m.deep = e.target.checked; touch(n); } }),
+        'Include children')) : null,
+    isHl ? h('div', { class: 'hint' },
+      '* at the start/end = rest of that word (Total: * → “Total: $42.00”, Order #* → “Order #1234”); ',
+      '* in the middle = anything. Case-insensitive. The note opens from the sidebar.') : null,
+    isHl ? null : h('div', { class: 'field' },
       input(n, [m, 'label'], { placeholder: m.kind === 'dot' ? 'Label (optional): 3, !, 🔥' : 'Text, number or emoji (empty = title)' })),
-    h('div', { class: 'pos' },
+    isHl ? null : h('div', { class: 'pos' },
       h('div', { class: 'grid9' }, POINTS.map((p, i) =>
         h('button', { class: n.anchor.point === p ? 'on' : '', title: p, onclick: () => { n.anchor.point = p; rerender(); } }, ARROWS[i]))),
       h('div', { class: 'col' },
@@ -555,6 +602,11 @@ async function refreshStatus() {
     const set = (el, txt, cls) => { if (el) { el.textContent = txt; el.className = 'status ' + cls; } };
     set(refs.url, st.urlMatch ? '✓ matches this page' : '✗ not this page', st.urlMatch ? 'ok' : 'bad');
     (refs.counts || []).forEach((el, i) => paintCount(el, st.counts[i]));
+    if (refs.textCount) {
+      const c = st.textCount;
+      refs.textCount.textContent = c == null ? '' : `${c} match${c === 1 ? '' : 'es'}`;
+      refs.textCount.className = 'count ' + (c == null ? '' : c === 0 ? 'zero' : 'one');
+    }
     set(refs.target, !st.found ? '✗ not found' : st.used === (n.target.active || 0) ? (st.visible ? '✓ found' : '⚠ found but hidden')
       : `⚠ using fallback #${st.used + 1}`, !st.found ? 'bad' : st.used === (n.target.active || 0) && st.visible ? 'ok' : 'warn');
     (refs.condRes || []).forEach((el, i) => {
@@ -564,8 +616,8 @@ async function refreshStatus() {
       el.title = c.count == null ? 'Invalid selector' : `${c.count} element(s) matched`;
     });
     set(refs.cond, n.conditions.length ? (st.met ? '✓ met — marker shown' : '✗ not met — marker hidden') : '', st.met ? 'ok' : 'bad');
-  } catch {
-    const msg = '— page not reachable';
+  } catch (e) {
+    const msg = '— ' + (/iframe/.test(e.message) ? e.message : 'page not reachable');
     for (const k of ['url', 'target', 'cond']) if (refs[k]) { refs[k].textContent = msg; refs[k].className = 'status hint'; }
   } finally {
     statusBusy = false;

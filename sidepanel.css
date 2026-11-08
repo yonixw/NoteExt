@@ -75,6 +75,9 @@ input[type=color] { width: 34px; height: 26px; padding: 0 2px; border: 1px solid
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; }
 .seg button.on { background: var(--accent); color: #fff; }
+.presets { display: flex; gap: 3px; flex-wrap: wrap; }
+.preset { width: 26px; height: 24px; padding: 0; font: 700 11px system-ui, sans-serif; border: 1px solid rgba(0,0,0,.25); }
+.preset.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cond { border: 1px solid var(--line); border-radius: 6px; padding: 6px; margin-bottom: 6px; background: var(--soft); }
 .cond .field:last-child { margin-bottom: 0; }
 .cond input[type=text].mono { font: 11px Consolas, monospace; }

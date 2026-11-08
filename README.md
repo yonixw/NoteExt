@@ -30,8 +30,23 @@ the sidebar on them. You can also just reload those pages.
   It converts to CSS (`[id^="user-"]`) or XPath (`starts-with(@id, "user-")`), shows the match
   count live, and lets you **Replace** the selector or **Add** the result as a new one. The same
   button sits next to condition selectors. There's also a **Selector cheat sheet** under the list.
-- **Marker**: Dot or Tooltip, with label (number, emoji or text), colors and dot size. The position is
-  a 3×3 anchor grid plus Outside / On edge / Inside, and an X/Y offset in px.
+- **Marker**: Dot, Tooltip or Highlight.
+  - **Dot / Tooltip**: label (number, emoji or text), colors and dot size. The position is a 3×3
+    anchor grid plus Outside / On edge / Inside, and an X/Y offset in px.
+  - **Highlight**: recolors the element itself, like a highlighter pen. "Include children" also
+    recolors everything inside it. Its note opens from the sidebar, since the element keeps its own
+    clicks.
+  - **Text pattern** (Highlight only): marks just the matching text inside the element instead of
+    the whole element. `*` at the start or end of the pattern means "the rest of that word"
+    (`Total: *` marks "Total: $42.00", `Order #*` marks "Order #1234"). `*` in the middle means
+    anything. Spaces match any whitespace, and matching ignores case. **All matches** marks every
+    match; unchecked marks only the first. The sidebar shows the live match count. Drawn with the
+    browser's CSS Custom Highlight API, so the page's HTML is not changed.
+  - **Color presets**: one-click background/text pairs (classic yellow/black, green, pink and more),
+    for every kind.
+- **Iframes**: the script runs in every frame. When you pick inside an iframe, the note remembers
+  that iframe's URL ("In iframe:" under Page). It shows when the top page matches the Page pattern
+  and that iframe is on it. A condition's element must be in the same frame as the note's element.
 - **Note**: free text. Click a marker on the page to read it. **Edit in sidebar** jumps to that note.
 - **Conditions** (all or any): element exists/visible, text equals/contains/regex, input or select
   value, checked or `aria-selected`, has class, attribute equals (`aria-selected=true` is useful for
@@ -60,7 +75,9 @@ Every change saves automatically to `chrome.storage.local`.
 
 ## Known limits (for now)
 
-- Top frame only. Elements inside iframes can't be targeted.
+- Iframes are matched by URL. Two iframes with the same URL on one page share notes, and only the
+  first is used for the sidebar's live status.
+- Shadow DOM inside page components (web components) isn't searched by selectors.
 - No "custom JavaScript" selectors or conditions. MV3 blocks `eval` in extensions, so CSS and XPath
   cover element lookup.
 - "Link visited" checks the browser history for the link's `href` (exact URL match).

@@ -3,7 +3,7 @@
   "name": "NoteExt - page notes",
   "version": "0.1.0",
   "description": "Pin dots and tooltips with notes and conditions onto elements of any website.",
-  "permissions": ["storage", "sidePanel", "scripting", "history", "tabs"],
+  "permissions": ["storage", "sidePanel", "scripting", "history", "tabs", "webNavigation"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": { "default_title": "Open NoteExt sidebar" },
@@ -12,7 +12,9 @@
     {
       "matches": ["<all_urls>"],
       "js": ["shared.js", "content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_origin_as_fallback": true
     }
   ]
 }
