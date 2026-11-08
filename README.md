@@ -57,6 +57,14 @@ the sidebar on them. You can also just reload those pages.
   exact URL, whole site, everywhere.
 - **Edit mode** shows every marker on the page, even when its conditions aren't met. Those markers
   are dimmed and dashed.
+- **Minimap** (header checkbox, on by default): a thin see-through strip at the right edge of the
+  page, just left of the scrollbar.
+  - It shows the visible part of the page as a yellow box with a red border, and each marker as a
+    tick in its color. Unmet markers show faded in edit mode.
+  - Inner scrolling panels, common in web apps, get their own strip inside the panel. Each iframe
+    gets its own as well.
+  - It ignores the mouse, so the scrollbar and the page work as usual. It's hidden when the master
+    switch is off or the page doesn't scroll.
 - **This page only** filters the dropdown to notes that match the current tab.
 - **Export / Import**: JSON. Import asks whether to **Merge** (same id replaces the existing note) or
   **Replace all**.
@@ -71,6 +79,7 @@ Every change saves automatically to `chrome.storage.local`.
 | `background.js` | Opens the side panel; answers "was this URL visited" (history API) |
 | `shared.js` | Data model, defaults, URL matching, condition list (used by page + panel) |
 | `content.js` | Picker, selector generation, condition evaluation, marker rendering (Shadow DOM) |
+| `minimap.js` | Scroll minimap strips; fed by `content.js` after every layout |
 | `sidepanel.html/.css/.js` | Sidebar UI |
 
 ## Known limits (for now)

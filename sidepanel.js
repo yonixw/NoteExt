@@ -90,8 +90,9 @@ async function sendToTab(msg, where = 'note') {
   } catch {
     // Content script not there yet (tab opened before the extension was loaded) -> inject it.
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['shared.js', 'content.js'] })
-        .catch(() => chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['shared.js', 'content.js'] }));
+      const files = ['shared.js', 'content.js', 'minimap.js'];
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files })
+        .catch(() => chrome.scripting.executeScript({ target: { tabId: tab.id }, files }));
     } catch (e) {
       throw new Error('Cannot run on this page (' + (e.message || e) + ')');
     }
@@ -178,6 +179,7 @@ $('#noteSelect').onchange = (e) => select(e.target.value || null);
 $('#newBtn').onclick = () => startPick('new', 'Click the element to attach the new note to…');
 $('#onlyPage').onchange = (e) => { settings.onlyThisPage = e.target.checked; saveSettings(); renderSelect(); };
 $('#editMode').onchange = (e) => { settings.editMode = e.target.checked; saveSettings(); };
+$('#minimap').onchange = (e) => { settings.minimap = e.target.checked; saveSettings(); };
 $('#masterSwitch').onchange = (e) => { settings.allEnabled = e.target.checked; saveSettings(); renderMaster(); };
 function renderMaster() {
   $('#masterSwitch').checked = settings.allEnabled !== false;
@@ -628,6 +630,7 @@ async function refreshStatus() {
 function renderAll() {
   $('#onlyPage').checked = !!settings.onlyThisPage;
   $('#editMode').checked = !!settings.editMode;
+  $('#minimap').checked = settings.minimap !== false;
   renderMaster();
   renderSelect();
   renderEditor();

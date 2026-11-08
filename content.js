@@ -374,6 +374,7 @@
     }
     if (bubble.style.display === 'block') placeBubble();
     if (hlEl) drawBox(hlBox, hlEl);
+    if (NX.minimap) NX.minimap.update({ items, settings, picking: !!picking }); // minimap.js
   }
 
   // ---------- Bubble (click on a marker) ----------

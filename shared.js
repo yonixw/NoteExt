@@ -100,5 +100,5 @@ NX.loadNotes = async () => {
 };
 NX.loadSettings = async () => {
   const r = await chrome.storage.local.get(NX.SETTINGS_KEY);
-  return Object.assign({ allEnabled: true, editMode: false, onlyThisPage: true }, r[NX.SETTINGS_KEY]);
+  return Object.assign({ allEnabled: true, editMode: false, onlyThisPage: true, minimap: true }, r[NX.SETTINGS_KEY]);
 };

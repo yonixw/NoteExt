@@ -11,7 +11,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["shared.js", "content.js"],
+      "js": ["shared.js", "content.js", "minimap.js"],
       "run_at": "document_idle",
       "all_frames": true,
       "match_origin_as_fallback": true
