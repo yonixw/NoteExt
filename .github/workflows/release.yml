@@ -1,0 +1,53 @@
+# Zips the extension and publishes it as the latest GitHub release.
+# Release tag = "v" + manifest.json version. Same version again -> the zip on that release is replaced;
+# bump the version in manifest.json to create a new release.
+name: Release
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - 'media/**'
+      - 'tools/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build zip
+        run: |
+          VERSION=$(jq -r .version manifest.json)
+          ZIP="NoteExt-v${VERSION}.zip"
+          mkdir -p dist
+          # Only what the extension needs at runtime (no media/, tools/, .github/).
+          zip -r -X "dist/${ZIP}" manifest.json *.js *.html *.css icons README.md
+          unzip -l "dist/${ZIP}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "ZIP=${ZIP}" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${VERSION}"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "dist/${ZIP}" --clobber
+            echo "Updated ${ZIP} on existing release ${TAG}"
+          else
+            gh release create "$TAG" "dist/${ZIP}" \
+              --target "$GITHUB_SHA" \
+              --title "NoteExt ${TAG}" \
+              --latest \
+              --notes "Install: unzip, open chrome://extensions, enable Developer mode, click **Load unpacked** and pick the unzipped folder. Built from ${GITHUB_SHA::7}."
+            echo "Created release ${TAG}"
+          fi

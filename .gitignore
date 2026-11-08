@@ -21,3 +21,6 @@ desktop.ini
 
 # Local Claude Code settings
 .claude/
+
+# Release build output
+dist/

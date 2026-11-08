@@ -1,16 +1,26 @@
 # NoteExt
 
-Pin notes onto elements of any website: a dot (inbox-badge style) or a tooltip, with free text,
-conditions, and a sidebar editor. No build step and no libraries: copy the folder and load it.
+Pin notes onto elements of any website: a dot (inbox-badge style), a tooltip or a highlight, with
+free text, conditions, a minimap and a sidebar editor. No build step and no libraries: copy the
+folder and load it.
 
 Source: https://github.com/yonixw/NoteExt
 
+![NoteExt sidebar with tooltips, a note bubble, highlights and the minimap on a Hacker News thread](media/Screenshot01.png)
+
+## Download
+
+Get the zip from the [latest release](https://github.com/yonixw/NoteExt/releases/latest). GitHub
+Actions builds it automatically on every push to `master`. The release is named after the
+manifest version, so bump `version` in `manifest.json` to cut a new one.
+
 ## Install (developer mode)
 
-1. Open `chrome://extensions` (or `edge://extensions`).
-2. Turn on **Developer mode**.
-3. Click **Load unpacked** and pick this folder.
-4. Click the extension's toolbar icon to open the sidebar. Pin it to the toolbar if you want it handy.
+1. Unzip the release (or clone this repo).
+2. Open `chrome://extensions` (or `edge://extensions`).
+3. Turn on **Developer mode**.
+4. Click **Load unpacked** and pick the folder that has `manifest.json` in it.
+5. Click the extension's toolbar icon to open the sidebar. Pin it to the toolbar if you want it handy.
 
 Pages that were open before you loaded the extension get the script injected the first time you use
 the sidebar on them. You can also just reload those pages.
@@ -85,6 +95,8 @@ Every change saves automatically to `chrome.storage.local`.
 | `sidepanel.html/.css/.js` | Sidebar UI |
 | `icons/` | App icon (16/32/48/128 px) |
 | `tools/make-icons.js` | Optional: regenerates the icons (`node tools/make-icons.js`, no dependencies) |
+| `media/` | README screenshots (not part of the extension zip) |
+| `.github/workflows/release.yml` | Zips the extension and publishes it as a GitHub release |
 
 ## Known limits (for now)
 
