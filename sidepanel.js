@@ -376,6 +376,11 @@ function renderEditor() {
           onclick: () => { m.color = bg; m.textColor = fg; rerender(); } }, 'Aa'))),
       m.kind === 'dot' ? h('label', { class: 'small', title: 'Size in px' }, 'Size',
         input(n, [m, 'size'], { type: 'number', min: 6, max: 60, style: 'width:52px' })) : null),
+    h('div', { class: 'field small', title: 'A heartbeat animation while the marker is shown' },
+      h('span', { class: 'hint' }, 'Effect:'),
+      seg([['none', 'None'], ['glow', '✨ Glow'], ['pulse', '💓 Pulse']], m.effect || 'none', (v) => { m.effect = v; rerender(); }),
+      isHl && (m.text || '').trim() && m.effect && m.effect !== 'none'
+        ? h('span', { class: 'hint' }, 'whole-element highlights only') : null),
     isHl ? h('div', { class: 'field' },
       input(n, [m, 'text'], { class: 'mono', placeholder: 'Text pattern (empty = whole element), e.g.  Total: *' }),
       refs.textCount = h('span', { class: 'count' })) : null,

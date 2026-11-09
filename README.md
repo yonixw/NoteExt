@@ -59,6 +59,9 @@ the sidebar on them. You can also just reload those pages.
     anything. Spaces match any whitespace, and matching ignores case. **All matches** marks every
     match; unchecked marks only the first. The sidebar shows the live match count. Drawn with the
     browser's CSS Custom Highlight API, so the page's HTML is not changed.
+  - **Effect**: None, **Glow** or **Pulse** — a gentle heartbeat (two quick beats, then a rest)
+    on any marker kind. Glow pulses a soft halo in the marker's color; Pulse grows the marker by a
+    few pixels. On a highlight it animates the element itself (not text-pattern highlights).
   - **Color presets**: one-click background/text pairs (classic yellow/black, green, pink and more),
     for every kind.
 - **Iframes**: the script runs in every frame. When you pick inside an iframe, the note remembers

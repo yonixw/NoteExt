@@ -61,7 +61,8 @@ NX.newNote = (url) => ({
   anchor: { point: 'top-right', mode: 'edge', dx: 0, dy: 0 },
   // kind: 'dot' | 'tooltip' | 'highlight' (recolors the element; deep = children too;
   // text = only text matching this pattern inside the element, allMatches = every match vs first)
-  marker: { kind: 'dot', label: '', color: '#e53935', textColor: '#ffffff', size: 14, deep: true, text: '', allMatches: false },
+  // effect: 'none' | 'glow' | 'pulse' - a small heartbeat animation (a glow, or growing a few px)
+  marker: { kind: 'dot', label: '', color: '#e53935', textColor: '#ffffff', size: 14, deep: true, text: '', allMatches: false, effect: 'none' },
   text: '',
   conditionMode: 'all',
   conditions: [],

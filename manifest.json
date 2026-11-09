@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "NoteExt - page notes",
   "short_name": "NoteExt",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Pin notes onto any website: dots, tooltips or highlights on elements, shown by conditions, with a minimap.",
   "homepage_url": "https://github.com/yonixw/NoteExt",
   "icons": {

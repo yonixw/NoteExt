@@ -42,6 +42,15 @@
   .m.tip.au::after { bottom: 100%; left: 50%; margin-left: -6px; border-bottom-color: var(--c); }
   .m.tip.ar::after { left: 100%; top: 50%; margin-top: -6px; border-left-color: var(--c); }
   .m.tip.al::after { right: 100%; top: 50%; margin-top: -6px; border-right-color: var(--c); }
+  /* Effects: a heartbeat (two quick beats, then rest). Pulse uses the 'scale' property so it
+     composes with the 'translate' used for positioning; --k is set per marker (= a few px). */
+  @keyframes nx-glow { 0%, 28%, 70%, 100% { box-shadow: var(--sh), 0 0 0 0 var(--c); }
+                       14%, 42% { box-shadow: var(--sh), 0 0 8px 3px var(--c); } }
+  @keyframes nx-pulse { 0%, 28%, 70%, 100% { scale: 1; } 14%, 42% { scale: var(--k, 1.2); } }
+  .m.dot { --sh: 0 1px 3px rgba(0,0,0,.45); }
+  .m.tip { --sh: 0 2px 6px rgba(0,0,0,.35); }
+  .m.fx-glow { animation: nx-glow 1.4s ease-in-out infinite; }
+  .m.fx-pulse { animation: nx-pulse 1.4s ease-in-out infinite; }
   .m.unmet { opacity: .4; outline: 2px dashed #444; outline-offset: 1px; }
   .m.sel { outline: 2px solid #1e88e5; outline-offset: 3px; opacity: 1; }
   .box { position: fixed; left: 0; top: 0; pointer-events: none; display: none;
@@ -295,8 +304,20 @@
           names.add(name);
           css.push(`::highlight(${name}) { background-color: ${bg}; color: ${fg}; }`);
         }
-      } else if (met) css.push(`${sel} { background-color: ${bg} !important; color: ${fg} !important; }`);
-      else css.push(`${s} { outline: 2px dashed ${bg} !important; outline-offset: 1px !important; }`);
+      } else if (met) {
+        css.push(`${sel} { background-color: ${bg} !important; color: ${fg} !important; }`);
+        // Effects animate the element itself (text-pattern highlights can't be animated).
+        if (n.marker.effect === 'glow') {
+          css.push(`@keyframes nx-glow-${n.id} { 0%, 28%, 70%, 100% { box-shadow: 0 0 0 0 ${bg}; } 14%, 42% { box-shadow: 0 0 8px 3px ${bg}; } }`,
+            `${s} { animation: nx-glow-${n.id} 1.4s ease-in-out infinite !important; }`);
+        } else if (n.marker.effect === 'pulse') {
+          // Grow by ~2px on each side whatever the element's size.
+          const r = el.getBoundingClientRect();
+          const k = (1 + 4 / Math.max(r.width, r.height, 12)).toFixed(4);
+          css.push(`@keyframes nx-pulse-${n.id} { 0%, 28%, 70%, 100% { scale: 1; } 14%, 42% { scale: ${k}; } }`,
+            `${s} { animation: nx-pulse-${n.id} 1.4s ease-in-out infinite !important; }`);
+        }
+      } else css.push(`${s} { outline: 2px dashed ${bg} !important; outline-offset: 1px !important; }`);
       if (settings.editMode && settings.selectedId === n.id)
         css.push(`${s} { box-shadow: 0 0 0 3px #1e88e5 !important; }`);
     }
@@ -332,7 +353,8 @@
     const sig = JSON.stringify([m, arrow, met, settings.editMode, settings.selectedId === n.id, n.title]);
     if (div.dataset.sig !== sig) {
       div.dataset.sig = sig;
-      div.className = ['m', m.kind === 'tooltip' ? 'tip' : 'dot', arrow,
+      const fx = met && (m.effect === 'glow' || m.effect === 'pulse') ? 'fx-' + m.effect : '';
+      div.className = ['m', m.kind === 'tooltip' ? 'tip' : 'dot', arrow, fx,
         !met ? 'unmet' : '', settings.editMode && settings.selectedId === n.id ? 'sel' : ''].join(' ');
       div.style.setProperty('--c', m.color);
       div.style.background = m.color;
@@ -349,7 +371,11 @@
         div.style.fontSize = Math.max(8, Math.round(s * 0.62)) + 'px';
         div.style.padding = m.label ? `0 ${Math.round(s * 0.28)}px` : '0';
       }
+      div.style.removeProperty('--k');
     }
+    // Pulse: grow ~2px on each side (needs the rendered size, so measure once it's laid out).
+    if (div.classList.contains('fx-pulse') && !div.style.getPropertyValue('--k') && div.offsetWidth)
+      div.style.setProperty('--k', (1 + 4 / Math.max(div.offsetWidth, div.offsetHeight, 6)).toFixed(4));
   }
 
   function layout() {
@@ -370,7 +396,7 @@
       else if (div.classList.contains('ar')) x -= 7;
       else if (div.classList.contains('al')) x += 7;
       const tx = -50 + 50 * ax * k, ty = -50 + 50 * ay * k;
-      div.style.transform = `translate(${x}px, ${y}px) translate(${tx}%, ${ty}%)`;
+      div.style.translate = `calc(${x}px + ${tx}%) calc(${y}px + ${ty}%)`;
     }
     if (bubble.style.display === 'block') placeBubble();
     if (hlEl) drawBox(hlBox, hlEl);
